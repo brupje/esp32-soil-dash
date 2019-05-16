@@ -17,6 +17,13 @@ AsyncWebServer server(80);
 DHT dht(DTH_SENSOR_PIN, DHTTYPE);
 Button2 button(BOOT_PIN);
 
+// wifisettings
+const char* ssid     = "";
+const char* password = "";
+
+// MDNS name
+const char* devname = "soil";
+
 void smartConfigStart(Button2 &b)
 {
     Serial.println("smartConfigStart...");
@@ -54,7 +61,7 @@ bool serverBegin()
         return false;
     }
     isBegin = true;
-    if (MDNS.begin("soil")) {
+    if (MDNS.begin(devname)) {
         Serial.println("MDNS responder started");
     }
     // Add Respective Cards
@@ -68,7 +75,7 @@ bool serverBegin()
     MDNS.addService("http", "tcp", 80);
     return true;
 }
-
+bool retry=false;
 
 void setup()
 {
@@ -76,16 +83,28 @@ void setup()
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, HIGH);
     WiFi.mode(WIFI_STA);
-    WiFi.begin();
+    WiFi.begin(ssid,password);
+    do {
 
-    if (WiFi.waitForConnectResult() != WL_CONNECTED) {
-        Serial.printf("WiFi connect fail!,please restart retry,or long press BOOT button enter smart config mode\n");
-    }
+      if (retry) {
+        delay(5000);
+        WiFi.reconnect();
+      }
+      
+      if (WiFi.waitForConnectResult() != WL_CONNECTED) {
+          Serial.printf("WiFi connect fail!,please restart retry,or long press BOOT button enter smart config mode\n");
+      }
+
+      retry= true;
+      
+    } while (WiFi.status() != WL_CONNECTED);
+    
     if (WiFi.status() == WL_CONNECTED) {
         Serial.print("IP Address: ");
         Serial.println(WiFi.localIP());
     }
     button.setLongClickHandler(smartConfigStart);
+    dht.begin();
 }
 
 void loop()
@@ -99,10 +118,14 @@ void loop()
                 float h = dht.readHumidity();
                 float t = dht.readTemperature();
                 if (!isnan(h) && !isnan(t) ) {
-                    ESPDash.updateTemperatureCard("temp1", (int)t);
+                    ESPDash.updateTemperatureCard("temp1", (float)t);
                     ESPDash.updateHumidityCard("hum1", (int)h);
                 } else {
-                    Serial.println("Failed to read from DHT sensor!");
+                    Serial.print("Failed to read from DHT sensor: h=");
+                    Serial.print(h);
+                    Serial.print(" t=");
+                    Serial.println(t);
+                    
                 }
                 ESPDash.updateHumidityCard("soil", map(analogRead(ADC_PIN), 0, 4096, 100, 0));
             }
